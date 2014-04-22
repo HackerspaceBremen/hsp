@@ -27,6 +27,15 @@ Abhängigkeiten: bash curl sed
 
 ----------------------------------------------------------------------------------------------------------------
 
+Installation:
+
+     git clone https://github.com/danielwf/hsp/
+     cd git
+     chmod a+x hsp  
+     sudo cp hsp /usr/bin/
+
+----------------------------------------------------------------------------------------------------------------
+
 Erstaufruf (Beispiel "Hackerspace Bremen e.V."):
 
      hsp -u https://hackerspacehb.appspot.com/v2/status -n USERNAME
