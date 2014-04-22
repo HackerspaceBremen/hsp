@@ -30,7 +30,7 @@
 #
 # git clone https://github.com/danielwf/hsp/
 # cd git
-# chmod a+x hsp  
+# chmod a+x hsp
 # sudo cp hsp /usr/bin/
 #
 # ----------------------------------------------------------------------------------------------------------------
@@ -96,6 +96,7 @@ do
     -t ) HSP_TOPIC=$2;shift;;
     -h ) HSP_OPTION="help";;
     --help ) HSP_OPTION="help";;
+    --cal ) xdg-open "https://www.hackerspace-bremen.de/kalender/"&;;
     * ) echo "Unknown option '$1' -- 'hsp -h' for help";exit;;
     --help ) 
   esac
@@ -137,6 +138,7 @@ then
   echo -e "\n\t-t [TOPIC]\t\tgiven TOPIC while changing the status of the hackspace-API"
   echo -e "\n\t-n [USERNAME]\t\tset your USERNAME for changing the hackspace-API-status\n\t\t\tthis value will be stored in ~/.hsp and is set as default for next use."
   echo -e "\n\t-p [PASSWORD]\t\tset your PASSWORD for changing the hackspace-API-status\n\t\t\tThis is not stored in ~/.hsp, but maybe in your bash-history"
+  echo -e "\n\t--cal\t\topen the 'Hackerspace Bremen'-Calender in your browser"
   echo -e "\nExamples: \nfirst usage:\thsp -u https://hackerspacehb.appspot.com/v2/status -n testusername\njust display:\thsp  or  hsp -d\nchange status to opened: \thsp -o -t 'Hackathon' -p 12345"
 fi
 
