@@ -29,7 +29,7 @@ Abhängigkeiten: bash curl sed
 
 Installation:
 
-     git clone https://github.com/danielwf/hsp/
+     git clone https://github.com/hackerspacebremen/hsp/
      cd git
      chmod a+x hsp  
      sudo cp hsp /usr/bin/
