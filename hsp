@@ -1,0 +1,283 @@
+#!/bin/bash
+
+#
+# hsp 0.1 - OpenStatus for Hackspaces with SpaceAPI
+#   Copyright (C) 2014 Daniel Wendt-Fröhlich
+#   daniel.w-froehlich@aetherfoton.de
+#
+#   This program is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# ----------------------------------------------------------------------------------------------------------------
+# hsp 0.1
+# Hackspace-Statusmelder für (beinahe) alle Hackspaces nach http://spaceapi.net/
+# Kann den Status des "Hackerspace Bremen e.V." ändern
+#
+# Abhängigkeiten: bash curl sed
+# ----------------------------------------------------------------------------------------------------------------
+#
+# Erstaufruf (Beispiel "Hackerspace Bremen e.V."):
+# hsp -u https://hackerspacehb.appspot.com/v2/status -n USERNAME
+#         Die URL und der Username werden in ~/.hsp gespeichert, damit sie nicht immer wieder eingegeben werden müssen.
+#
+# Status abrufen:
+# hsp
+#
+# Space öffnen (mit nachträglicher Passworteingabe):
+# hsp -o
+#         oder
+# hsp -o -t "THEMA"
+#
+# Space schließen (mit nachträglicher Passworteingabe):
+# hsp -c
+#         oder
+# hsp -c -t "THEMA"
+#
+# Für weitere Möglichkeiten: hsp -h
+#
+# ----------------------------------------------------------------------------------------------------------------
+#
+# Geschrieben wurde das Script als "mobiles Unterwegs-Projekt" mit SailfishOS.
+# Ziel dieses Scripts ist es, einen CLI-Spacemelder in möglichst vielen Linux-Umgebungen bereit zu stellen. 
+# Daher wurde auf Werkzeuge zurückgegriffen, die in fast jeder Umgebung vorhanden sein sollten.
+# So läuft dieser Code sowohl unter Ubuntu, wie auch unter SailfishOS, Cyanogenmod und raspbian.
+# Die Konvertierung der Status-Ausgabe von JSON in eine Variablenliste ist ohne python, ruby, perl o.ä. eher
+# ungenau, erfüllt hier aber seinen Zweck und war bei 90% aller unter spaceapi.net gelisteten URLs erfolgreich. 
+# Funktion oder Sicherheit können nicht garantiert werden, vor allem auch weil dieses Script von einem Anfänger 
+# erstellt wurde. 
+# 
+# TODO: englische Kommentare
+# TODO: Bessere Hilfeübersicht
+# TODO: lesbarer machen
+
+
+
+HSP_DEBUG=0
+
+if [ -f ~/.hsp ]			# Wenn ~/.hsp vorhanden ist...
+then
+  source ~/.hsp             # ...Script mit gespeicherten Variablen ausführen: $HSP_URL und $HSP_USER
+fi
+
+until [ -z "$1" ]   			# läuft bis übergebene Parameter abgearbeitet sind
+do
+  case $1 in
+    -d ) HSP_OPTION="display";;
+    --name ) HSP_DISPLAY="statusname";;
+    --open ) HSP_DISPLAY="statusopen";;
+    --statustext ) HSP_DISPLAY="statustext";;
+    --message ) HSP_DISPLAY="statusmessage";;
+    --changed ) HSP_DISPLAY="statuschanged";;
+    -o ) HSP_OPTION="open";;
+    -c ) HSP_OPTION="close";;
+    -u ) HSP_URL=$2;shift;;
+    --spacesearch ) curl -s http://spaceapi.net/directory.json | grep -i $2;exit;;
+    -n ) HSP_USER=$2;shift;;
+    -p ) HSP_PASSWORD=$2;shift;;
+    -t ) HSP_TOPIC=$2;shift;;
+    -h ) HSP_OPTION="help";;
+    --help ) HSP_OPTION="help";;
+    * ) echo "Unknown option '$1' -- 'hsp -h' for help";exit;;
+    --help ) 
+  esac
+  shift					# verschiebt die Parameternummer einen weiter, altes $1 wird verworfen
+done
+
+HSP_OPTION=${HSP_OPTION:="display"} 	# defaults, wenn keine Parameter übergeben wurden
+HSP_DISPLAY=${HSP_DISPLAY:="all"}
+
+if [ $HSP_DEBUG == 1 ]
+then
+  echo "URL: "$HSP_URL
+  echo "Topic: "$HSP_TOPIC
+  echo "Username: "$HSP_USER
+  echo "Password: "$HSP_PASSWORD
+  echo "Option: "$HSP_OPTION
+  echo "Display: "$HSP_DISPLAY
+  echo "------------------------------------"
+fi
+
+
+if [ $HSP_OPTION == "help" ]
+then
+  echo -e "Usage: hsp [OPTION]... [-d URL] [-u USERNAME] [-p PASSWORD] [-t TOPIC]\n"
+  echo -e "Download and return the status of a given hackspace-api-URL\nThe last given URL and username are stored in ~/.hsp and will be used as default."
+  echo -e "Changing the status of the hackspace is compatible to the API of 'Hackerspace Bremen e.V.' only."
+  echo -e "\n\t-d\t\t(=default) download and display complete status of hackspace"
+  echo -e "\n\t-u [URL]\t\tset URL of the hackspace-API\n\t\t\tthis value will be stored in ~/.hsp and is set as default for next use.\n\t\t\tsearch http://spaceapi.net for your hackspace-API-URL."
+  echo -e "\n\t--spacesearch [SEARCH]\t\tsearches the SpaceAPI.Net-JSON-Database.\n\t\t\tNo clean output, just for getting the line with the right URL"
+  echo -e "\n\t--name\t\t download and return only the name of hackspace"
+  echo -e "\n\t--open\t\t download and return only if hackspace is opened '1/0' "
+  echo -e "\n\t--statustext\t\t download and return only current statustext"
+  echo -e "\n\t--message\t\t download and return only current message"
+  echo -e "\n\t--changed\t\t download and return time of last change"
+  echo -e "\n\t-h\t--help\tdisplays this help"
+  echo -e "\n\nHackerspace Bremen only:"
+  echo -e "\n\t-o\t\tchanges status to opened\n\t\t\tneeds password as it is not stored - see option -p"
+  echo -e "\n\t-c\t\tchanges status to closed\n\t\t\tneeds password as it is not stored - see option -p"
+  echo -e "\n\t-t [TOPIC]\t\tgiven TOPIC while changing the status of the hackspace-API"
+  echo -e "\n\t-n [USERNAME]\t\tset your USERNAME for changing the hackspace-API-status\n\t\t\tthis value will be stored in ~/.hsp and is set as default for next use."
+  echo -e "\n\t-p [PASSWORD]\t\tset your PASSWORD for changing the hackspace-API-status\n\t\t\tThis is not stored in ~/.hsp, but maybe in your bash-history"
+  echo -e "\nExamples: \nfirst usage:\thsp -u https://hackerspacehb.appspot.com/v2/status -n testusername\njust display:\thsp  or  hsp -d\nchange status to opened: \thsp -o -t 'Hackathon' -p 12345"
+fi
+
+
+if [ $HSP_OPTION == "display" ]
+then 
+  #verwendete Variablen:
+  HSPSTATUS_SPACENAME=""
+  HSPSTATUS_OPEN=""
+  HSPSTATUS_LASTCHANGE=""
+  HSPSTATUS_TEXT=""
+  HSPSTATUS_MESSAGE=""
+
+  HSP_CURLOUT=$(curl -# -s "$HSP_URL")    # ruft per curl die SpaceAPI ab, die per $HSP_URL übergeben wurde
+  HSP_CURLSTAT=$?                         # der letzte Returncode (hier von curl) wird in HSP_CURLSTAT gelegt.
+  if [ $HSP_CURLSTAT == 0 ]                # Wenn curl keinen Fehlercode zurück gab...
+  then 
+
+    if [ $HSP_DEBUG == 1 ]
+    then
+      echo "curlout ist:"
+      echo $HSP_CURLOUT 
+      echo "------------------------------------"
+    fi
+
+    # Kein echtes und zuverlässiges JSON-Parsing von $HSP_CURLOUT, aber erfüllt seinen Zweck:
+    #  { } ], }, ", ," (teilweise mit Leerzeichen) werden durch \n oder \n" ersetzt
+    # "open":true/false wird ersetzt durch HSPSTATUS_OPEN=1/0 - ein einfaches Ersetzen von open würde auch das "open" in "Icon" mit berücksichtigen. 
+    # "status": wird zu HSPSTATUS_TEXT= 
+    # "space": wird zu HSPSTATUS_SPACENAME= 
+    # "lastchange": wird zu HSPSTATUS_LASTCHANGE=
+    # im zweiten sed-Durchlauf werden nur Zeilen ausgegeben, die HSPSTATUS enthalten (wie grep nur mit sed), so dass eine Variablenliste entsteht
+    # Die Variablenlisten-Ausgabe wird durch eval direkt ausgeführt.
+    eval $(
+      echo $HSP_CURLOUT | 
+      sed '
+        s/],/\n/g ; 
+        s/},/\n/g ; 
+        s/[{}]/\n/g ; 
+        s/",/"\n/g ; 
+        s/,"/\n"/g ; 
+        s/, "/\n"/g ;
+        s/"open":true/\nHSPSTATUS_OPEN=1\n/g ; 
+        s/"open": true/\nHSPSTATUS_OPEN=1\n/g ;
+        s/"open" : true/\nHSPSTATUS_OPEN=1\n/g ;
+        s/"open":false/\nHSPSTATUS_OPEN=0\n/g ;
+        s/"open": false/\nHSPSTATUS_OPEN=0\n/g ;
+        s/"open" : false/\nHSPSTATUS_OPEN=0\n/g ;  
+        s/"status":/\nHSPSTATUS_TEXT=/g ; 
+        s/"status" :/HSPSTATUS_TEXT=/g ;
+        s/"message":/\nHSPSTATUS_MESSAGE=/g ;
+        s/"message" :/\nHSPSTATUS_MESSAGE=/g ;
+        s/"space":/\nHSPSTATUS_SPACENAME=/g ;
+        s/"space" :/\nHSPSTATUS_SPACENAME=/g ;
+        s/"lastchange":/\nHSPSTATUS_LASTCHANGE=/g ;
+        s/"lastchange" :/\nHSPSTATUS_LASTCHANGE=/g ;
+      ' | 
+      sed '/HSPSTATUS_/!d ; s/= /=/g ; s/ =/=/g'
+    )
+      
+    if [ $HSP_DEBUG == 1 ]
+    then
+      echo "Space: "$HSPSTATUS_SPACENAME
+      echo "Open: "$HSPSTATUS_OPEN
+      echo "Last changed: "$HSPSTATUS_LASTCHANGE
+      echo -e "Status: ""\n"$HSPSTATUS_TEXT
+      echo -e "Message: ""\n"$HSPSTATUS_MESSAGE
+    fi
+
+
+    if [ $HSP_DISPLAY == "all" ]       # erstellt eine lesbare Ausgabe aller bekannten Variablen
+    then
+      echo -n $HSPSTATUS_SPACENAME
+      if [ $HSPSTATUS_OPEN ]
+      then
+        echo -n " is "
+        if [ $HSPSTATUS_OPEN == "1" ]
+        then 
+          echo -e -n "\x1b[32;01mopened\x1b[01;01;00m"
+        fi
+        if [ $HSPSTATUS_OPEN == "0" ]
+        then
+          echo -e -n "\x1b[31;01mclosed\x1b[01;01;00m"
+        fi
+      fi
+      if [ $HSPSTATUS_LASTCHANGE ]
+      then
+        echo -n " since "$(date --date="@$HSPSTATUS_LASTCHANGE" +%c)
+      fi    
+      echo -e "\n\x1b[34;01m"$HSPSTATUS_TEXT"\x1b[01;01;00m"
+      echo -e "\x1b[35;01m"$HSPSTATUS_MESSAGE"\x1b[01;01;00m"
+    fi
+    
+    if [ $HSP_DISPLAY == "statusname" ]
+    then
+      echo $HSPSTATUS_SPACENAME
+    fi
+
+    if [ $HSP_DISPLAY == "statusopen" ]
+    then
+      echo $HSPSTATUS_OPEN
+    fi
+
+    if [ $HSP_DISPLAY == "statustext" ]
+    then
+      echo -e $HSPSTATUS_TEXT
+    fi
+    
+    if [ $HSP_DISPLAY == "statusmessage" ]
+    then
+      echo -e $HSPSTATUS_MESSAGE  
+    fi
+
+    if [ $HSP_DISPLAY == "statuschanged" ]
+    then
+      echo $(date --date="@$HSPSTATUS_LASTCHANGE")
+    fi
+
+  else                                  # Fehlerausgabe, falls curl einen Fehler zurück gegeben hat
+    echo -e "\x1b[31;01mcurl returned error $HSP_CURLSTAT.\x1b[01;01;00m\n'man curl' for further informations or 'hsp -d URL' for changing the Space-API-URL.\nCheck your network-connections or if '$HSP_URL' is reachable."
+    exit
+  fi
+fi
+
+# Öffnet den Space: Zuerst Sammeln und Zusammenfügen der Variablen, dann mit curl posten. Ausgabe kommt dann über curl direkt vom Server.
+if [ $HSP_OPTION == "open" ]
+then
+  if [ -z $HSP_PASSWORD ]
+  then
+    echo "Password: (invisible input)"
+    read -s HSP_PASSWORD 
+  fi
+  HSP_OPENSTRING=$(echo "name=$HSP_USER&pass=$HSP_PASSWORD&message=$HSP_TOPIC")
+  curl --data "$HSP_OPENSTRING" https://hackerspacehb.appspot.com/v2/cmd/open 
+  echo -e "\n"
+fi  
+
+# Schließt den Space: Zuerst Sammeln und Zusammenfügen der Variablen, dann mit curl posten. Ausgabe kommt dann über curl direkt vom Server.
+if [ $HSP_OPTION == "close" ]
+then
+  if [ -z $HSP_PASSWORD ]
+  then
+    echo "Password: (invisible input)"
+    read -s HSP_PASSWORD 
+  fi
+  HSP_CLOSESTRING=$(echo "name=$HSP_USER&pass=$HSP_PASSWORD&message=$HSP_TOPIC")
+  curl --data "$HSP_CLOSESTRING" https://hackerspacehb.appspot.com/v2/cmd/close 
+  echo -e "\n"
+fi 
+
+# speichert URL und Usernamen in ~/.hsp wenn Script ohne Abbruch bis zum Ende gelaufen ist.
+echo "HSP_URL=$HSP_URL" > ~/.hsp 
+echo "HSP_USER=$HSP_USER" >> ~/.hsp
